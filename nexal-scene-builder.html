@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexal 3D/VR Scene Builder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Component Library */
+        #component-library {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 320px;
+            border: 1px solid #4CAF50;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        #component-library h2 {
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #4CAF50;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .component-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+        }
+        
+        .component-info h3 {
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #4CAF50;
+        }
+        
+        .component-info p {
+            font-size: 11px;
+            color: #aaa;
+            margin: 0;
+        }
+        
+        .add-btn {
+            padding: 8px 16px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .add-btn:hover {
+            background: #45a049;
+        }
+        
+        /* Scene Objects List */
+        #scene-objects {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+        
+        #scene-objects h3 {
+            font-size: 14px;
+            color: #2196F3;
+            margin-bottom: 10px;
+        }
+        
+        .scene-object-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 4px;
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid #2196F3;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .scene-object-item.selected {
+            background: rgba(33, 150, 243, 0.3);
+            border-color: #64B5F6;
+        }
+        
+        .remove-btn {
+            padding: 4px 8px;
+            background: #f44336;
+            border: none;
+            border-radius: 3px;
+            color: white;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .remove-btn:hover {
+            background: #da190b;
+        }
+        
+        /* Action Buttons */
+        .action-buttons {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .action-btn {
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        
+        .action-btn.vr {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .action-btn.save {
+            background: #2196F3;
+        }
+        
+        .action-btn.clear {
+            background: #FF9800;
+        }
+        
+        .action-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        /* Instructions */
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #aaa;
+            max-width: 320px;
+            border: 1px solid #333;
+        }
+        
+        #instructions h4 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        #instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        #instructions li {
+            padding: 3px 0;
+        }
+        
+        #instructions li:before {
+            content: "→ ";
+            color: #667eea;
+        }
+        
+        /* Status */
+        #status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            border: 1px solid #4CAF50;
+            color: #4CAF50;
+            max-width: 300px;
+        }
+        
+        /* Transform Controls Info */
+        #transform-info {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            border: 1px solid #2196F3;
+            display: none;
+        }
+        
+        #transform-info h4 {
+            color: #2196F3;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .transform-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+        
+        .transform-label {
+            color: #aaa;
+        }
+        
+        .transform-value {
+            color: #fff;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <!-- Component Library -->
+    <div id="component-library">
+        <h2>Component Library</h2>
+        
+        <div class="component-item">
+            <div class="component-info">
+                <h3>Grundfos CR 32-4</h3>
+                <p>Centrifugal Pump • 2.0m tall</p>
+            </div>
+            <button class="add-btn" onclick="addComponent('pump')">+ Add</button>
+        </div>
+        
+        <div class="component-item">
+            <div class="component-info">
+                <h3>Check Valve DN100</h3>
+                <p>Non-return Valve • 0.4m</p>
+            </div>
+            <button class="add-btn" onclick="addComponent('check-valve')">+ Add</button>
+        </div>
+        
+        <div class="component-item">
+            <div class="component-info">
+                <h3>Gate Valve DN100</h3>
+                <p>Isolation Valve • 0.5m</p>
+            </div>
+            <button class="add-btn" onclick="addComponent('gate-valve')">+ Add</button>
+        </div>
+        
+        <div id="scene-objects">
+            <h3>Scene Objects (0)</h3>
+            <div id="objects-list"></div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="action-btn vr" id="vr-button-placeholder">ENTER VR</button>
+            <button class="action-btn save" onclick="saveScene()">💾 Save Scene</button>
+            <button class="action-btn clear" onclick="clearScene()">🗑️ Clear All</button>
+        </div>
+    </div>
+    
+    <!-- Instructions -->
+    <div id="instructions">
+        <h4>Desktop Controls</h4>
+        <ul>
+            <li>Click object to select</li>
+            <li>Drag gizmo to move</li>
+            <li>Right drag to orbit</li>
+            <li>Scroll to zoom</li>
+            <li>G = move, R = rotate, S = scale</li>
+        </ul>
+        <h4 style="margin-top: 10px;">VR Controls</h4>
+        <ul>
+            <li>Point at object</li>
+            <li>Squeeze grip to grab</li>
+            <li>Move controller to position</li>
+            <li>Release to place</li>
+        </ul>
+    </div>
+    
+    <!-- Status -->
+    <div id="status">Ready - Add components to scene</div>
+    
+    <!-- Transform Info -->
+    <div id="transform-info">
+        <h4>Selected Object</h4>
+        <div id="transform-data"></div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+        // ==========================================
+        // COMPONENT DEFINITIONS WITH REAL-WORLD SCALE
+        // ==========================================
+        const COMPONENT_TYPES = {
+            'pump': {
+                name: 'Grundfos CR 32-4',
+                type: 'Centrifugal Pump',
+                realWorldHeight: 2.0, // 2 meters tall
+                modelUrl: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/pump_default.glb',
+                color: 0x4CAF50
+            },
+            'check-valve': {
+                name: 'Check Valve DN100',
+                type: 'Non-return Valve',
+                realWorldHeight: 0.4, // 0.4 meters
+                modelUrl: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/Check_Valve.glb',
+                color: 0x2196F3
+            },
+            'gate-valve': {
+                name: 'Gate Valve DN100',
+                type: 'Isolation Valve',
+                realWorldHeight: 0.5, // 0.5 meters
+                modelUrl: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/Gate_Valve.glb',
+                color: 0xFF9800
+            }
+        };
+
+        // ==========================================
+        // SCENE VARIABLES
+        // ==========================================
+        let scene, camera, renderer, controls, transformControls;
+        let sceneObjects = []; // Array of all objects in scene
+        let selectedObject = null;
+        let objectCounter = 0;
+        
+        // VR variables
+        let controller1, controller2;
+        let controllerGrip1, controllerGrip2;
+        let raycaster;
+        let tempMatrix = new THREE.Matrix4();
+        let group;
+        
+        // VR grab state
+        let grabbedObject = null;
+        let grabController = null;
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            scene.fog = new THREE.Fog(0x1a1a1a, 20, 100);
+            
+            // Camera - positioned at human eye height (1.6m)
+            camera = new THREE.PerspectiveCamera(
+                50,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                100
+            );
+            camera.position.set(5, 1.6, 5);
+            
+            // Renderer with XR
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.xr.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // VR Button
+            const vrButton = VRButton.createButton(renderer);
+            vrButton.style.position = 'absolute';
+            vrButton.style.left = '20px';
+            vrButton.style.bottom = '20px';
+            vrButton.style.padding = '15px 30px';
+            vrButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            vrButton.style.border = 'none';
+            vrButton.style.borderRadius = '8px';
+            vrButton.style.color = 'white';
+            vrButton.style.fontWeight = 'bold';
+            vrButton.style.fontSize = '16px';
+            vrButton.style.cursor = 'pointer';
+            vrButton.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.4)';
+            vrButton.style.zIndex = '999';
+            document.body.appendChild(vrButton);
+            document.getElementById('vr-button-placeholder').style.display = 'none';
+            
+            // Orbit Controls (desktop)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 2;
+            controls.maxDistance = 30;
+            controls.target.set(0, 1, 0);
+            controls.maxPolarAngle = Math.PI / 2; // Don't go below ground
+            
+            // Transform Controls (for moving objects in desktop)
+            transformControls = new TransformControls(camera, renderer.domElement);
+            transformControls.addEventListener('dragging-changed', (event) => {
+                controls.enabled = !event.value;
+            });
+            transformControls.addEventListener('change', updateTransformInfo);
+            scene.add(transformControls);
+            
+            // Keyboard shortcuts for transform modes
+            window.addEventListener('keydown', (event) => {
+                switch(event.key.toLowerCase()) {
+                    case 'g':
+                        transformControls.setMode('translate');
+                        break;
+                    case 'r':
+                        transformControls.setMode('rotate');
+                        break;
+                    case 's':
+                        transformControls.setMode('scale');
+                        break;
+                }
+            });
+            
+            // Group for all scene objects
+            group = new THREE.Group();
+            scene.add(group);
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(10, 15, 10);
+            directionalLight1.castShadow = true;
+            directionalLight1.shadow.camera.left = -10;
+            directionalLight1.shadow.camera.right = 10;
+            directionalLight1.shadow.camera.top = 10;
+            directionalLight1.shadow.camera.bottom = -10;
+            directionalLight1.shadow.mapSize.width = 2048;
+            directionalLight1.shadow.mapSize.height = 2048;
+            scene.add(directionalLight1);
+            
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight2.position.set(-5, 10, -5);
+            scene.add(directionalLight2);
+            
+            // Ground with realistic size
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x2a2a2a,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Grid - 1 meter spacing
+            const gridHelper = new THREE.GridHelper(50, 50, 0x4CAF50, 0x333333);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+            
+            // Setup VR controllers
+            setupVRControllers();
+            
+            // Raycaster
+            raycaster = new THREE.Raycaster();
+            
+            // Mouse click for selection
+            renderer.domElement.addEventListener('click', onMouseClick);
+            
+            // Window resize
+            window.addEventListener('resize', onWindowResize);
+            
+            // Animation loop
+            renderer.setAnimationLoop(animate);
+            
+            updateStatus('Ready - Add components to scene');
+        }
+        
+        // ==========================================
+        // VR CONTROLLERS SETUP
+        // ==========================================
+        function setupVRControllers() {
+            const controllerModelFactory = new XRControllerModelFactory();
+            
+            // Controller 1
+            controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('selectstart', onSelectStart);
+            controller1.addEventListener('selectend', onSelectEnd);
+            controller1.addEventListener('squeezestart', () => onSqueezeStart(controller1));
+            controller1.addEventListener('squeezeend', onSqueezeEnd);
+            scene.add(controller1);
+            
+            controllerGrip1 = renderer.xr.getControllerGrip(0);
+            controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+            scene.add(controllerGrip1);
+            
+            // Controller 2
+            controller2 = renderer.xr.getController(1);
+            controller2.addEventListener('selectstart', onSelectStart);
+            controller2.addEventListener('selectend', onSelectEnd);
+            controller2.addEventListener('squeezestart', () => onSqueezeStart(controller2));
+            controller2.addEventListener('squeezeend', onSqueezeEnd);
+            scene.add(controller2);
+            
+            controllerGrip2 = renderer.xr.getControllerGrip(1);
+            controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+            scene.add(controllerGrip2);
+            
+            // Add controller rays
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 0, -1)
+            ]);
+            const material = new THREE.LineBasicMaterial({ color: 0x4CAF50 });
+            
+            const line1 = new THREE.Line(geometry, material);
+            line1.scale.z = 5;
+            controller1.add(line1);
+            
+            const line2 = new THREE.Line(geometry, material);
+            line2.scale.z = 5;
+            controller2.add(line2);
+        }
+        
+        // VR Grab functionality
+        function onSqueezeStart(controller) {
+            if (grabbedObject) return; // Already grabbing something
+            
+            // Raycast from controller
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+            
+            const intersects = raycaster.intersectObjects(group.children, true);
+            
+            if (intersects.length > 0) {
+                // Find the root object
+                let intersectedObj = intersects[0].object;
+                while (intersectedObj.parent !== group && intersectedObj.parent !== scene) {
+                    intersectedObj = intersectedObj.parent;
+                }
+                
+                if (intersectedObj.parent === group) {
+                    grabbedObject = intersectedObj;
+                    grabController = controller;
+                    
+                    // Attach object to controller
+                    group.remove(grabbedObject);
+                    controller.add(grabbedObject);
+                    
+                    // Visual feedback
+                    grabbedObject.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            child.userData.originalEmissive = child.material.emissive.getHex();
+                            child.material.emissive.setHex(0x4CAF50);
+                        }
+                    });
+                }
+            }
+        }
+        
+        function onSqueezeEnd() {
+            if (grabbedObject && grabController) {
+                // Detach from controller
+                grabController.remove(grabbedObject);
+                group.add(grabbedObject);
+                
+                // Restore original materials
+                grabbedObject.traverse((child) => {
+                    if (child.isMesh && child.material && child.userData.originalEmissive !== undefined) {
+                        child.material.emissive.setHex(child.userData.originalEmissive);
+                    }
+                });
+                
+                // Update scene state
+                updateSceneState();
+                
+                grabbedObject = null;
+                grabController = null;
+            }
+        }
+        
+        function onSelectStart(event) {
+            // Additional VR interactions can go here
+        }
+        
+        function onSelectEnd(event) {
+            // Additional VR interactions
+        }
+        
+        // ==========================================
+        // OBJECT MANAGEMENT
+        // ==========================================
+        window.addComponent = function(componentType) {
+            const componentDef = COMPONENT_TYPES[componentType];
+            if (!componentDef) return;
+            
+            updateStatus(`Loading ${componentDef.name}...`);
+            
+            const loader = new GLTFLoader();
+            
+            loader.load(
+                componentDef.modelUrl,
+                function(gltf) {
+                    objectCounter++;
+                    const model = gltf.scene;
+                    
+                    // Calculate scale based on real-world height
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = box.getSize(new THREE.Vector3());
+                    const currentHeight = size.y;
+                    const scaleFactor = componentDef.realWorldHeight / currentHeight;
+                    
+                    // Apply scale
+                    model.scale.multiplyScalar(scaleFactor);
+                    
+                    // Position: place objects in a row, on the ground
+                    const spacing = 2; // 2 meters apart
+                    const xPos = (sceneObjects.length % 5) * spacing - 4; // Row of 5
+                    const zPos = Math.floor(sceneObjects.length / 5) * spacing;
+                    model.position.set(xPos, 0, zPos);
+                    
+                    // Enable shadows
+                    model.traverse((node) => {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                        }
+                    });
+                    
+                    // Store metadata
+                    model.userData = {
+                        id: `obj-${objectCounter}`,
+                        componentType: componentType,
+                        name: `${componentDef.name} #${objectCounter}`,
+                        realWorldHeight: componentDef.realWorldHeight
+                    };
+                    
+                    // Add to scene
+                    group.add(model);
+                    sceneObjects.push(model);
+                    
+                    updateStatus(`Added ${componentDef.name}`);
+                    updateObjectsList();
+                    updateSceneState();
+                },
+                undefined,
+                function(error) {
+                    console.error('Error loading model:', error);
+                    updateStatus('Error loading model');
+                }
+            );
+        }
+        
+        function removeObject(objectId) {
+            const index = sceneObjects.findIndex(obj => obj.userData.id === objectId);
+            if (index === -1) return;
+            
+            const object = sceneObjects[index];
+            
+            // Detach transform controls if attached
+            if (transformControls.object === object) {
+                transformControls.detach();
+                selectedObject = null;
+            }
+            
+            // Remove from scene
+            group.remove(object);
+            sceneObjects.splice(index, 1);
+            
+            updateObjectsList();
+            updateSceneState();
+            updateStatus('Object removed');
+        }
+        
+        function selectObject(object) {
+            if (selectedObject === object) return;
+            
+            selectedObject = object;
+            transformControls.attach(object);
+            updateObjectsList();
+            updateTransformInfo();
+            
+            document.getElementById('transform-info').style.display = 'block';
+        }
+        
+        // ==========================================
+        // MOUSE INTERACTION (DESKTOP)
+        // ==========================================
+        function onMouseClick(event) {
+            if (renderer.xr.isPresenting) return; // Don't handle clicks in VR
+            
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(group.children, true);
+            
+            if (intersects.length > 0) {
+                // Find the root object
+                let intersectedObj = intersects[0].object;
+                while (intersectedObj.parent !== group && intersectedObj.parent !== scene) {
+                    intersectedObj = intersectedObj.parent;
+                }
+                
+                if (intersectedObj.parent === group) {
+                    selectObject(intersectedObj);
+                }
+            } else {
+                // Clicked empty space - deselect
+                transformControls.detach();
+                selectedObject = null;
+                document.getElementById('transform-info').style.display = 'none';
+                updateObjectsList();
+            }
+        }
+        
+        // ==========================================
+        // UI UPDATES
+        // ==========================================
+        function updateObjectsList() {
+            const listEl = document.getElementById('objects-list');
+            const countEl = document.querySelector('#scene-objects h3');
+            
+            countEl.textContent = `Scene Objects (${sceneObjects.length})`;
+            
+            if (sceneObjects.length === 0) {
+                listEl.innerHTML = '<div style="color: #666; font-size: 11px; padding: 8px;">No objects in scene</div>';
+                return;
+            }
+            
+            listEl.innerHTML = sceneObjects.map(obj => `
+                <div class="scene-object-item ${selectedObject === obj ? 'selected' : ''}" 
+                     onclick="selectObjectById('${obj.userData.id}')">
+                    <span>${obj.userData.name}</span>
+                    <button class="remove-btn" onclick="event.stopPropagation(); removeObject('${obj.userData.id}')">✕</button>
+                </div>
+            `).join('');
+        }
+        
+        window.selectObjectById = function(objectId) {
+            const object = sceneObjects.find(obj => obj.userData.id === objectId);
+            if (object) selectObject(object);
+        }
+        
+        window.removeObject = removeObject;
+        
+        function updateTransformInfo() {
+            if (!selectedObject) return;
+            
+            const pos = selectedObject.position;
+            const rot = selectedObject.rotation;
+            const scale = selectedObject.scale;
+            
+            document.getElementById('transform-data').innerHTML = `
+                <div class="transform-row">
+                    <span class="transform-label">Position:</span>
+                    <span class="transform-value">
+                        X: ${pos.x.toFixed(2)}m
+                        Y: ${pos.y.toFixed(2)}m
+                        Z: ${pos.z.toFixed(2)}m
+                    </span>
+                </div>
+                <div class="transform-row">
+                    <span class="transform-label">Rotation:</span>
+                    <span class="transform-value">
+                        X: ${(rot.x * 180 / Math.PI).toFixed(1)}°
+                        Y: ${(rot.y * 180 / Math.PI).toFixed(1)}°
+                        Z: ${(rot.z * 180 / Math.PI).toFixed(1)}°
+                    </span>
+                </div>
+                <div class="transform-row">
+                    <span class="transform-label">Scale:</span>
+                    <span class="transform-value">${scale.x.toFixed(2)}</span>
+                </div>
+            `;
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        // ==========================================
+        // SCENE STATE MANAGEMENT
+        // ==========================================
+        function getSceneState() {
+            return {
+                objects: sceneObjects.map(obj => ({
+                    id: obj.userData.id,
+                    componentType: obj.userData.componentType,
+                    name: obj.userData.name,
+                    position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
+                    rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
+                    scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z }
+                })),
+                timestamp: new Date().toISOString()
+            };
+        }
+        
+        function updateSceneState() {
+            // This would send to your Nexal backend
+            const state = getSceneState();
+            console.log('Scene state updated:', state);
+            // In production: await fetch('/api/save-scene', { method: 'POST', body: JSON.stringify(state) });
+        }
+        
+        window.saveScene = function() {
+            const state = getSceneState();
+            const json = JSON.stringify(state, null, 2);
+            
+            // Download as file
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `nexal-scene-${Date.now()}.json`;
+            a.click();
+            
+            updateStatus('Scene saved!');
+            console.log('Saved scene state:', state);
+        }
+        
+        window.clearScene = function() {
+            if (!confirm('Clear all objects from scene?')) return;
+            
+            // Remove all objects
+            sceneObjects.forEach(obj => {
+                group.remove(obj);
+            });
+            
+            sceneObjects = [];
+            selectedObject = null;
+            transformControls.detach();
+            
+            updateObjectsList();
+            updateStatus('Scene cleared');
+            document.getElementById('transform-info').style.display = 'none';
+        }
+        
+        // ==========================================
+        // ANIMATION LOOP
+        // ==========================================
+        function animate() {
+            // Update desktop controls (disabled in VR)
+            if (!renderer.xr.isPresenting) {
+                controls.update();
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
