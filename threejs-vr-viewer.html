@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexal VR Viewer - Meta Quest</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Desktop Controls (hidden in VR) */
+        #desktop-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 280px;
+            border: 1px solid #4CAF50;
+            z-index: 100;
+        }
+        
+        #desktop-controls h2 {
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #4CAF50;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .component-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .component-btn:hover {
+            background: rgba(76, 175, 80, 0.3);
+            transform: translateX(5px);
+        }
+        
+        #vr-button {
+            margin-top: 15px;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        #vr-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        #vr-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #aaa;
+            max-width: 300px;
+            border: 1px solid #333;
+        }
+        
+        #instructions h4 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        #instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        #instructions li {
+            padding: 4px 0;
+        }
+        
+        #instructions li:before {
+            content: "→ ";
+            color: #667eea;
+        }
+        
+        #status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            border: 1px solid #4CAF50;
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container"></div>
+        
+        <div id="desktop-controls">
+            <h2>Nexal VR Viewer</h2>
+            <button class="component-btn" onclick="loadComponent('pump')">
+                Grundfos CR 32-4<br>
+                <small style="color: #aaa;">Centrifugal Pump</small>
+            </button>
+            <button class="component-btn" onclick="loadComponent('check-valve')">
+                Check Valve DN100<br>
+                <small style="color: #aaa;">Non-return Valve</small>
+            </button>
+            <button class="component-btn" onclick="loadComponent('gate-valve')">
+                Gate Valve DN100<br>
+                <small style="color: #aaa;">Isolation Valve</small>
+            </button>
+            <button id="vr-button">ENTER VR</button>
+        </div>
+        
+        <div id="instructions">
+            <h4>VR Instructions</h4>
+            <ul>
+                <li>Load component first</li>
+                <li>Click "ENTER VR"</li>
+                <li>Use controllers to point</li>
+                <li>Trigger to select/interact</li>
+                <li>Works on Meta Quest 2/3/Pro</li>
+            </ul>
+        </div>
+        
+        <div id="status">Ready - Load a component</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+        // Metadata (same as before)
+        const COMPONENT_METADATA = {
+            'pump': {
+                id: 'PUMP-001',
+                name: 'Grundfos CR 32-4',
+                type: 'Centrifugal Pump',
+                specs: 'Flow: 32 m³/h | Head: 40m | Power: 7.5kW',
+                modelUrl: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/pump_default.glb'
+            },
+            'check-valve': {
+                id: 'VALVE-CHK-001',
+                name: 'Check Valve DN100',
+                type: 'Non-return Valve',
+                specs: 'DN100 | PN16 | Ductile Iron',
+                modelUrl: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/Check_Valve.glb'
+            },
+            'gate-valve': {
+                id: 'VALVE-GATE-001',
+                name: 'Gate Valve DN100',
+                type: 'Isolation Valve',
+                specs: 'DN100 | PN16 | Manual Operation',
+                modelUrl: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/Gate_Valve.glb'
+            }
+        };
+
+        // Scene variables
+        let scene, camera, renderer, controls;
+        let currentModel = null;
+        let currentComponentId = null;
+        
+        // VR variables
+        let controller1, controller2;
+        let controllerGrip1, controllerGrip2;
+        let raycaster;
+        
+        // Info panel in VR
+        let infoPanel = null;
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            scene.fog = new THREE.Fog(0x1a1a1a, 10, 50);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(
+                50,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                100
+            );
+            camera.position.set(0, 1.6, 3);
+            
+            // Renderer with XR enabled
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.xr.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // VR Button - replace the custom button with Three.js VRButton
+            const vrButton = VRButton.createButton(renderer);
+            
+            // Style the VR button
+            vrButton.style.position = 'absolute';
+            vrButton.style.left = '20px';
+            vrButton.style.bottom = '20px';
+            vrButton.style.padding = '15px 30px';
+            vrButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            vrButton.style.border = 'none';
+            vrButton.style.borderRadius = '8px';
+            vrButton.style.color = 'white';
+            vrButton.style.fontWeight = 'bold';
+            vrButton.style.fontSize = '16px';
+            vrButton.style.cursor = 'pointer';
+            vrButton.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.4)';
+            vrButton.style.zIndex = '999';
+            
+            document.body.appendChild(vrButton);
+            
+            // Hide the custom VR button
+            document.getElementById('vr-button').style.display = 'none';
+            
+            // Desktop controls (disabled in VR)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 1;
+            controls.maxDistance = 10;
+            controls.target.set(0, 1, 0);
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(5, 10, 5);
+            directionalLight1.castShadow = true;
+            scene.add(directionalLight1);
+            
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight2.position.set(-5, 5, -5);
+            scene.add(directionalLight2);
+            
+            // Ground plane
+            const groundGeometry = new THREE.PlaneGeometry(20, 20);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x2a2a2a,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Grid
+            const gridHelper = new THREE.GridHelper(20, 20, 0x4CAF50, 0x333333);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+            
+            // Setup VR controllers
+            setupVRControllers();
+            
+            // Create info panel for VR
+            createInfoPanel();
+            
+            // Raycaster for controller interactions
+            raycaster = new THREE.Raycaster();
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            
+            // Check VR support
+            if ('xr' in navigator) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    if (!supported) {
+                        updateStatus('VR not supported on this device');
+                        document.getElementById('vr-button').disabled = true;
+                    }
+                });
+            } else {
+                updateStatus('WebXR not available');
+                document.getElementById('vr-button').disabled = true;
+            }
+            
+            // Start animation loop
+            renderer.setAnimationLoop(animate);
+            
+            updateStatus('Ready - Load a component');
+        }
+        
+        function setupVRControllers() {
+            const controllerModelFactory = new XRControllerModelFactory();
+            
+            // Controller 1
+            controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('selectstart', onSelectStart);
+            controller1.addEventListener('selectend', onSelectEnd);
+            scene.add(controller1);
+            
+            controllerGrip1 = renderer.xr.getControllerGrip(0);
+            controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+            scene.add(controllerGrip1);
+            
+            // Controller 2
+            controller2 = renderer.xr.getController(1);
+            controller2.addEventListener('selectstart', onSelectStart);
+            controller2.addEventListener('selectend', onSelectEnd);
+            scene.add(controller2);
+            
+            controllerGrip2 = renderer.xr.getControllerGrip(1);
+            controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+            scene.add(controllerGrip2);
+            
+            // Add controller rays
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 0, -1)
+            ]);
+            const material = new THREE.LineBasicMaterial({ color: 0x4CAF50 });
+            
+            const line1 = new THREE.Line(geometry, material);
+            line1.scale.z = 5;
+            controller1.add(line1);
+            
+            const line2 = new THREE.Line(geometry, material);
+            line2.scale.z = 5;
+            controller2.add(line2);
+        }
+        
+        function createInfoPanel() {
+            // Create a 3D panel that displays component info in VR
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const context = canvas.getContext('2d');
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const geometry = new THREE.PlaneGeometry(1.5, 1.5);
+            infoPanel = new THREE.Mesh(geometry, material);
+            infoPanel.position.set(2, 1.6, 0);
+            infoPanel.rotation.y = -Math.PI / 4;
+            infoPanel.visible = false;
+            scene.add(infoPanel);
+            
+            // Store canvas context for updates
+            infoPanel.userData.canvas = canvas;
+            infoPanel.userData.context = context;
+        }
+        
+        function updateInfoPanel(componentId) {
+            if (!infoPanel || !componentId) return;
+            
+            const metadata = COMPONENT_METADATA[componentId];
+            const canvas = infoPanel.userData.canvas;
+            const ctx = infoPanel.userData.context;
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Border
+            ctx.strokeStyle = '#4CAF50';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+            
+            // Title
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText(metadata.name, 40, 80);
+            
+            // Type
+            ctx.fillStyle = '#2196F3';
+            ctx.font = '32px Arial';
+            ctx.fillText(metadata.type, 40, 130);
+            
+            // ID
+            ctx.fillStyle = '#aaaaaa';
+            ctx.font = '28px Arial';
+            ctx.fillText(`ID: ${metadata.id}`, 40, 180);
+            
+            // Specs
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '26px Arial';
+            const specs = metadata.specs.split(' | ');
+            let y = 240;
+            specs.forEach(spec => {
+                ctx.fillText(spec, 40, y);
+                y += 40;
+            });
+            
+            // WIMES Compliant badge
+            ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+            ctx.fillRect(40, canvas.height - 120, 200, 60);
+            ctx.strokeStyle = '#4CAF50';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(40, canvas.height - 120, 200, 60);
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('WIMES ✓', 80, canvas.height - 80);
+            
+            // Update texture
+            infoPanel.material.map.needsUpdate = true;
+            infoPanel.visible = true;
+        }
+        
+        function onSelectStart(event) {
+            const controller = event.target;
+            
+            if (currentModel) {
+                // Basic interaction - could expand this
+                console.log('Controller interacting with model');
+            }
+        }
+        
+        function onSelectEnd(event) {
+            // Handle release
+        }
+        
+        function animate() {
+            // Update desktop controls (disabled in VR)
+            if (!renderer.xr.isPresenting) {
+                controls.update();
+            }
+            
+            // Rotate model slowly for demo
+            if (currentModel) {
+                currentModel.rotation.y += 0.005;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Component loading
+        window.loadComponent = function(componentId) {
+            currentComponentId = componentId;
+            const metadata = COMPONENT_METADATA[componentId];
+            
+            if (!metadata) {
+                updateStatus('Component not found');
+                return;
+            }
+            
+            updateStatus(`Loading ${metadata.name}...`);
+            
+            // Remove previous model
+            if (currentModel) {
+                scene.remove(currentModel);
+                currentModel = null;
+            }
+            
+            const loader = new GLTFLoader();
+            
+            loader.load(
+                metadata.modelUrl,
+                function(gltf) {
+                    currentModel = gltf.scene;
+                    
+                    // Position model at comfortable VR height
+                    const box = new THREE.Box3().setFromObject(currentModel);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    
+                    currentModel.position.x = -center.x;
+                    currentModel.position.y = 1.0 - center.y; // VR eye height
+                    currentModel.position.z = -center.z;
+                    
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    const scale = 0.8 / maxDim;
+                    currentModel.scale.multiplyScalar(scale);
+                    
+                    // Enable shadows
+                    currentModel.traverse((node) => {
+                        if (node.isMesh) {
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                        }
+                    });
+                    
+                    scene.add(currentModel);
+                    
+                    updateStatus(`${metadata.name} loaded - Enter VR!`);
+                    updateInfoPanel(componentId);
+                },
+                function(xhr) {
+                    const percent = (xhr.loaded / xhr.total * 100).toFixed(0);
+                    updateStatus(`Loading: ${percent}%`);
+                },
+                function(error) {
+                    console.error('Error loading model:', error);
+                    updateStatus('Error loading model');
+                }
+            );
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
