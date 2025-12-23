@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexal Quest Viewer - Live Sync</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Connection Status */
+        #connection-status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            border: 2px solid #4CAF50;
+            z-index: 1000;
+        }
+        
+        .status-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .status-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .status-dot.connected {
+            background: #4CAF50;
+            box-shadow: 0 0 10px #4CAF50;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.disconnected {
+            background: #f44336;
+        }
+        
+        .status-dot.syncing {
+            background: #FF9800;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* API Config */
+        #api-config {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            min-width: 280px;
+            z-index: 1000;
+        }
+        
+        #api-config h3 {
+            color: #2196F3;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        #api-config input {
+            width: 100%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        
+        #api-config button {
+            width: 100%;
+            padding: 8px;
+            background: #2196F3;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        
+        #api-config button:hover {
+            background: #1976D2;
+        }
+        
+        #api-config button.disconnect {
+            background: #f44336;
+        }
+        
+        #api-config button.disconnect:hover {
+            background: #d32f2f;
+        }
+        
+        .config-hidden {
+            display: none;
+        }
+        
+        /* Scene Info */
+        #scene-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            border: 1px solid #333;
+            z-index: 1000;
+        }
+        
+        #scene-info h4 {
+            color: #4CAF50;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            color: #aaa;
+        }
+        
+        .info-value {
+            color: #fff;
+            margin-left: 10px;
+        }
+        
+        /* Instructions */
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            border: 1px solid #333;
+            max-width: 250px;
+            z-index: 1000;
+        }
+        
+        #instructions h4 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        #instructions ul {
+            list-style: none;
+            padding: 0;
+            color: #aaa;
+        }
+        
+        #instructions li {
+            padding: 3px 0;
+        }
+        
+        #instructions li:before {
+            content: "→ ";
+            color: #667eea;
+        }
+        
+        /* Desktop Tooltip (for non-VR) */
+        #desktop-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #4CAF50;
+            min-width: 280px;
+            pointer-events: none;
+            display: none;
+            z-index: 2000;
+            font-size: 12px;
+        }
+        
+        #desktop-tooltip h3 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+            font-size: 14px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        
+        .tooltip-label {
+            color: #aaa;
+        }
+        
+        .tooltip-value {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <!-- Connection Status -->
+    <div id="connection-status">
+        <div class="status-row">
+            <div class="status-dot disconnected" id="statusDot"></div>
+            <span id="statusText">Disconnected</span>
+        </div>
+        <div class="status-row">
+            <span style="color: #aaa; font-size: 11px;" id="lastUpdate">Last update: Never</span>
+        </div>
+    </div>
+    
+    <!-- API Config -->
+    <div id="api-config">
+        <h3>Nexal Platform Connection</h3>
+        <input type="text" id="apiUrl" placeholder="https://your-nexal-server.com/api" value="http://localhost:3000/api">
+        <input type="text" id="projectId" placeholder="Project ID" value="demo-project">
+        <button onclick="connectToNexal()">Connect</button>
+        <button class="disconnect config-hidden" id="disconnectBtn" onclick="disconnectFromNexal()">Disconnect</button>
+    </div>
+    
+    <!-- Scene Info -->
+    <div id="scene-info">
+        <h4>Scene Objects</h4>
+        <div class="info-row">
+            <span>Pumps:</span>
+            <span class="info-value" id="pumpCount">0</span>
+        </div>
+        <div class="info-row">
+            <span>Valves:</span>
+            <span class="info-value" id="valveCount">0</span>
+        </div>
+        <div class="info-row">
+            <span>Total:</span>
+            <span class="info-value" id="totalCount">0</span>
+        </div>
+    </div>
+    
+    <!-- Instructions -->
+    <div id="instructions">
+        <h4 id="instructions-title">Desktop Mode</h4>
+        <ul id="instructions-list">
+            <li>Drag to rotate view</li>
+            <li>Scroll to zoom</li>
+            <li>Hover for details</li>
+            <li>Click "ENTER VR" for Quest</li>
+        </ul>
+    </div>
+    
+    <!-- Desktop Tooltip -->
+    <div id="desktop-tooltip"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { VRButton } from 'three/addons/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+        // ==========================================
+        // MODEL REGISTRY (same as Nexal)
+        // ==========================================
+        const MODEL_URLS = {
+            pump: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/pump_default.glb',
+            checkValve: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/Check_Valve.glb',
+            gateValve: 'https://raw.githubusercontent.com/NexalTech/model.glb/main/Gate_Valve.glb'
+        };
+        
+        // Real-world heights for proper scaling
+        const REAL_WORLD_HEIGHTS = {
+            pump: 2.0,        // 2 meters
+            checkValve: 0.4,  // 0.4 meters
+            gateValve: 0.5    // 0.5 meters
+        };
+
+        // ==========================================
+        // SYNC STATE
+        // ==========================================
+        let apiUrl = '';
+        let projectId = '';
+        let isConnected = false;
+        let syncInterval = null;
+        let lastSceneState = null;
+        
+        // Scene tracking
+        const sceneObjects = new Map(); // nodeId -> { model, metadata, infoPanels }
+
+        // ==========================================
+        // THREE.JS SETUP
+        // ==========================================
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        let controller1, controller2;
+        let controllerGrip1, controllerGrip2;
+        let group; // Group for all scene objects
+        
+        // VR grab state
+        let grabbedObject = null;
+        let grabController = null;
+        let tempMatrix = new THREE.Matrix4();
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050505);
+            scene.fog = new THREE.Fog(0x050505, 20, 100);
+            
+            // Camera at human eye height
+            camera = new THREE.PerspectiveCamera(
+                50,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                100
+            );
+            camera.position.set(5, 1.6, 5);
+            
+            // Renderer with XR
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.xr.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // VR Button
+            const vrButton = VRButton.createButton(renderer);
+            vrButton.style.position = 'absolute';
+            vrButton.style.left = '50%';
+            vrButton.style.bottom = '20px';
+            vrButton.style.transform = 'translateX(-50%)';
+            vrButton.style.padding = '15px 30px';
+            vrButton.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            vrButton.style.border = 'none';
+            vrButton.style.borderRadius = '8px';
+            vrButton.style.color = 'white';
+            vrButton.style.fontWeight = 'bold';
+            vrButton.style.fontSize = '16px';
+            vrButton.style.cursor = 'pointer';
+            vrButton.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.4)';
+            vrButton.style.zIndex = '999';
+            document.body.appendChild(vrButton);
+            
+            // Update instructions when entering/exiting VR
+            renderer.xr.addEventListener('sessionstart', () => {
+                document.getElementById('instructions-title').textContent = 'VR Mode';
+                document.getElementById('instructions-list').innerHTML = `
+                    <li>Point at objects</li>
+                    <li>Squeeze grip to grab</li>
+                    <li>Move while holding</li>
+                    <li>Release to place</li>
+                `;
+            });
+            
+            renderer.xr.addEventListener('sessionend', () => {
+                document.getElementById('instructions-title').textContent = 'Desktop Mode';
+                document.getElementById('instructions-list').innerHTML = `
+                    <li>Drag to rotate view</li>
+                    <li>Scroll to zoom</li>
+                    <li>Hover for details</li>
+                    <li>Click "ENTER VR" for Quest</li>
+                `;
+            });
+            
+            // Orbit Controls (desktop)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 2;
+            controls.maxDistance = 30;
+            controls.target.set(0, 1, 0);
+            controls.maxPolarAngle = Math.PI / 2;
+            
+            // Group for all objects
+            group = new THREE.Group();
+            scene.add(group);
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+            
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight1.position.set(10, 15, 10);
+            directionalLight1.castShadow = true;
+            directionalLight1.shadow.camera.left = -10;
+            directionalLight1.shadow.camera.right = 10;
+            directionalLight1.shadow.camera.top = 10;
+            directionalLight1.shadow.camera.bottom = -10;
+            directionalLight1.shadow.mapSize.width = 2048;
+            directionalLight1.shadow.mapSize.height = 2048;
+            scene.add(directionalLight1);
+            
+            const directionalLight2 = new THREE.DirectionalLight(0x00d4ff, 0.3);
+            directionalLight2.position.set(-5, 10, -5);
+            scene.add(directionalLight2);
+            
+            const pointLight = new THREE.PointLight(0x00d4ff, 0.5, 10);
+            pointLight.position.set(0, 3, 0);
+            scene.add(pointLight);
+            
+            // Ground
+            const groundGeometry = new THREE.PlaneGeometry(50, 50);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a1a,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Grid - 1 meter spacing
+            const gridHelper = new THREE.GridHelper(50, 50, 0x00d4ff, 0x111111);
+            gridHelper.position.y = 0.01;
+            scene.add(gridHelper);
+            
+            // Setup VR controllers
+            setupVRControllers();
+            
+            // Raycaster for hover/grab
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            // Desktop hover detection
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('mouseleave', hideDesktopTooltip);
+            
+            // Window resize
+            window.addEventListener('resize', onWindowResize);
+            
+            // Animation loop
+            renderer.setAnimationLoop(animate);
+            
+            updateStatus('disconnected', 'Ready - Configure connection');
+        }
+        
+        // ==========================================
+        // VR CONTROLLERS
+        // ==========================================
+        function setupVRControllers() {
+            const controllerModelFactory = new XRControllerModelFactory();
+            
+            // Controller 1
+            controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('squeezestart', () => onSqueezeStart(controller1));
+            controller1.addEventListener('squeezeend', onSqueezeEnd);
+            scene.add(controller1);
+            
+            controllerGrip1 = renderer.xr.getControllerGrip(0);
+            controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+            scene.add(controllerGrip1);
+            
+            // Controller 2
+            controller2 = renderer.xr.getController(1);
+            controller2.addEventListener('squeezestart', () => onSqueezeStart(controller2));
+            controller2.addEventListener('squeezeend', onSqueezeEnd);
+            scene.add(controller2);
+            
+            controllerGrip2 = renderer.xr.getControllerGrip(1);
+            controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+            scene.add(controllerGrip2);
+            
+            // Controller rays
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 0, -1)
+            ]);
+            const material = new THREE.LineBasicMaterial({ color: 0x00d4ff });
+            
+            const line1 = new THREE.Line(geometry, material);
+            line1.scale.z = 5;
+            controller1.add(line1);
+            
+            const line2 = new THREE.Line(geometry, material);
+            line2.scale.z = 5;
+            controller2.add(line2);
+        }
+        
+        function onSqueezeStart(controller) {
+            if (grabbedObject) return;
+            
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+            
+            const intersects = raycaster.intersectObjects(group.children, true);
+            
+            if (intersects.length > 0) {
+                let intersectedObj = intersects[0].object;
+                while (intersectedObj.parent !== group && intersectedObj.parent !== scene) {
+                    intersectedObj = intersectedObj.parent;
+                }
+                
+                if (intersectedObj.parent === group) {
+                    grabbedObject = intersectedObj;
+                    grabController = controller;
+                    
+                    group.remove(grabbedObject);
+                    controller.add(grabbedObject);
+                    
+                    // Visual feedback
+                    grabbedObject.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            child.userData.originalEmissive = child.material.emissive?.getHex() || 0x000000;
+                            if (child.material.emissive) {
+                                child.material.emissive.setHex(0x00d4ff);
+                            }
+                        }
+                    });
+                }
+            }
+        }
+        
+        function onSqueezeEnd() {
+            if (grabbedObject && grabController) {
+                grabController.remove(grabbedObject);
+                group.add(grabbedObject);
+                
+                grabbedObject.traverse((child) => {
+                    if (child.isMesh && child.material && child.userData.originalEmissive !== undefined) {
+                        if (child.material.emissive) {
+                            child.material.emissive.setHex(child.userData.originalEmissive);
+                        }
+                    }
+                });
+                
+                grabbedObject = null;
+                grabController = null;
+            }
+        }
+        
+        // ==========================================
+        // DESKTOP HOVER TOOLTIPS
+        // ==========================================
+        function onMouseMove(event) {
+            if (renderer.xr.isPresenting) return;
+            
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(group.children, true);
+            
+            if (intersects.length > 0) {
+                let intersectedObj = intersects[0].object;
+                while (intersectedObj.parent !== group && intersectedObj.parent !== scene) {
+                    intersectedObj = intersectedObj.parent;
+                }
+                
+                if (intersectedObj.parent === group && intersectedObj.userData.nodeId) {
+                    showDesktopTooltip(intersectedObj.userData.nodeId, event.clientX, event.clientY);
+                    renderer.domElement.style.cursor = 'pointer';
+                } else {
+                    hideDesktopTooltip();
+                    renderer.domElement.style.cursor = 'default';
+                }
+            } else {
+                hideDesktopTooltip();
+                renderer.domElement.style.cursor = 'default';
+            }
+        }
+        
+        function showDesktopTooltip(nodeId, x, y) {
+            const objData = sceneObjects.get(nodeId);
+            if (!objData) return;
+            
+            const tooltip = document.getElementById('desktop-tooltip');
+            const metadata = objData.metadata;
+            
+            let content = `<h3>${metadata.tag}</h3>`;
+            content += `<div class="tooltip-row"><span class="tooltip-label">Type:</span><span class="tooltip-value">${metadata.type}</span></div>`;
+            
+            if (metadata.data) {
+                for (const [key, value] of Object.entries(metadata.data)) {
+                    if (value && value !== '—') {
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        content += `<div class="tooltip-row"><span class="tooltip-label">${label}:</span><span class="tooltip-value">${value}</span></div>`;
+                    }
+                }
+            }
+            
+            tooltip.innerHTML = content;
+            tooltip.style.left = (x + 20) + 'px';
+            tooltip.style.top = (y + 20) + 'px';
+            tooltip.style.display = 'block';
+        }
+        
+        function hideDesktopTooltip() {
+            document.getElementById('desktop-tooltip').style.display = 'none';
+        }
+        
+        // ==========================================
+        // API CONNECTION & SYNC
+        // ==========================================
+        window.connectToNexal = async function() {
+            apiUrl = document.getElementById('apiUrl').value.trim();
+            projectId = document.getElementById('projectId').value.trim();
+            
+            if (!apiUrl || !projectId) {
+                alert('Please enter API URL and Project ID');
+                return;
+            }
+            
+            updateStatus('syncing', 'Connecting...');
+            
+            try {
+                // Test connection
+                const response = await fetch(`${apiUrl}/scene/${projectId}`);
+                if (!response.ok) throw new Error('Connection failed');
+                
+                const data = await response.json();
+                
+                isConnected = true;
+                updateStatus('connected', 'Connected - Live sync active');
+                
+                // Hide config, show disconnect
+                document.getElementById('apiUrl').disabled = true;
+                document.getElementById('projectId').disabled = true;
+                document.getElementById('disconnectBtn').classList.remove('config-hidden');
+                
+                // Initial scene load
+                await syncScene(data);
+                
+                // Start polling every 2 seconds
+                syncInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`${apiUrl}/scene/${projectId}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            await syncScene(data);
+                            updateLastUpdateTime();
+                        }
+                    } catch (error) {
+                        console.error('Sync error:', error);
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                updateStatus('disconnected', 'Connection failed');
+                alert('Failed to connect to Nexal platform. Make sure the API server is running.');
+                console.error('Connection error:', error);
+            }
+        }
+        
+        window.disconnectFromNexal = function() {
+            if (syncInterval) {
+                clearInterval(syncInterval);
+                syncInterval = null;
+            }
+            
+            isConnected = false;
+            updateStatus('disconnected', 'Disconnected');
+            
+            document.getElementById('apiUrl').disabled = false;
+            document.getElementById('projectId').disabled = false;
+            document.getElementById('disconnectBtn').classList.add('config-hidden');
+            
+            // Clear scene
+            sceneObjects.forEach((objData, nodeId) => {
+                group.remove(objData.model);
+            });
+            sceneObjects.clear();
+            updateSceneInfo();
+        }
+        
+        async function syncScene(sceneData) {
+            if (!sceneData || !sceneData.nodes) return;
+            
+            // Track which nodes exist in new data
+            const currentNodeIds = new Set(sceneData.nodes.map(n => n.id));
+            
+            // Remove objects that no longer exist
+            sceneObjects.forEach((objData, nodeId) => {
+                if (!currentNodeIds.has(nodeId)) {
+                    group.remove(objData.model);
+                    sceneObjects.delete(nodeId);
+                }
+            });
+            
+            // Add or update objects
+            for (const node of sceneData.nodes) {
+                if (sceneObjects.has(node.id)) {
+                    // Update existing object position if changed
+                    updateObject(node);
+                } else {
+                    // Add new object
+                    await addObject(node);
+                }
+            }
+            
+            updateSceneInfo();
+        }
+        
+        async function addObject(node) {
+            const loader = new GLTFLoader();
+            
+            // Determine model URL based on node type
+            let modelUrl, realWorldHeight;
+            
+            if (node.type === 'pump') {
+                modelUrl = MODEL_URLS.pump;
+                realWorldHeight = REAL_WORLD_HEIGHTS.pump;
+            } else if (node.type === 'valve') {
+                // Check valve type
+                const valveType = node.data?.valveType || 'Gate';
+                if (valveType === 'Check' || valveType === 'NRV') {
+                    modelUrl = MODEL_URLS.checkValve;
+                    realWorldHeight = REAL_WORLD_HEIGHTS.checkValve;
+                } else {
+                    modelUrl = MODEL_URLS.gateValve;
+                    realWorldHeight = REAL_WORLD_HEIGHTS.gateValve;
+                }
+            } else {
+                return; // Unknown type
+            }
+            
+            try {
+                const gltf = await loader.loadAsync(modelUrl);
+                const model = gltf.scene;
+                
+                // Scale to real-world height
+                const box = new THREE.Box3().setFromObject(model);
+                const size = box.getSize(new THREE.Vector3());
+                const scaleFactor = realWorldHeight / size.y;
+                model.scale.multiplyScalar(scaleFactor);
+                
+                // Position from node data or auto-position
+                if (node.position) {
+                    model.position.set(node.position.x, node.position.y || 0, node.position.z);
+                } else {
+                    // Auto-position in a grid
+                    const index = sceneObjects.size;
+                    const spacing = 3;
+                    const xPos = (index % 5) * spacing - 6;
+                    const zPos = Math.floor(index / 5) * spacing;
+                    model.position.set(xPos, 0, zPos);
+                }
+                
+                // Enable shadows
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                
+                // Store metadata
+                model.userData.nodeId = node.id;
+                model.userData.nodeType = node.type;
+                
+                // Create VR info panel
+                const infoPanel = createVRInfoPanel(node);
+                infoPanel.position.set(0, realWorldHeight + 0.5, 0);
+                model.add(infoPanel);
+                
+                group.add(model);
+                
+                sceneObjects.set(node.id, {
+                    model: model,
+                    metadata: node,
+                    infoPanel: infoPanel
+                });
+                
+            } catch (error) {
+                console.error('Error loading model:', error);
+            }
+        }
+        
+        function updateObject(node) {
+            const objData = sceneObjects.get(node.id);
+            if (!objData) return;
+            
+            // Update position if provided
+            if (node.position) {
+                objData.model.position.set(node.position.x, node.position.y || 0, node.position.z);
+            }
+            
+            // Update metadata
+            objData.metadata = node;
+            
+            // Update info panel
+            updateVRInfoPanel(objData.infoPanel, node);
+        }
+        
+        function createVRInfoPanel(node) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Draw panel background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Border
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+            
+            // Title
+            ctx.fillStyle = '#00d4ff';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText(node.tag, 40, 80);
+            
+            // Type
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = '32px Arial';
+            ctx.fillText(node.type.toUpperCase(), 40, 130);
+            
+            // Data
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '26px Arial';
+            let y = 200;
+            if (node.data) {
+                for (const [key, value] of Object.entries(node.data)) {
+                    if (value && value !== '—') {
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        ctx.fillText(`${label}: ${value}`, 40, y);
+                        y += 40;
+                    }
+                }
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const panel = new THREE.Mesh(geometry, material);
+            
+            panel.userData.canvas = canvas;
+            panel.userData.context = ctx;
+            
+            return panel;
+        }
+        
+        function updateVRInfoPanel(panel, node) {
+            const canvas = panel.userData.canvas;
+            const ctx = panel.userData.context;
+            
+            // Clear and redraw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+            
+            ctx.fillStyle = '#00d4ff';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText(node.tag, 40, 80);
+            
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = '32px Arial';
+            ctx.fillText(node.type.toUpperCase(), 40, 130);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '26px Arial';
+            let y = 200;
+            if (node.data) {
+                for (const [key, value] of Object.entries(node.data)) {
+                    if (value && value !== '—') {
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        ctx.fillText(`${label}: ${value}`, 40, y);
+                        y += 40;
+                    }
+                }
+            }
+            
+            panel.material.map.needsUpdate = true;
+        }
+        
+        // ==========================================
+        // UI UPDATES
+        // ==========================================
+        function updateStatus(state, text) {
+            const dot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            dot.className = 'status-dot ' + state;
+            statusText.textContent = text;
+        }
+        
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            document.getElementById('lastUpdate').textContent = `Last update: ${timeStr}`;
+        }
+        
+        function updateSceneInfo() {
+            let pumps = 0, valves = 0;
+            
+            sceneObjects.forEach((objData) => {
+                if (objData.metadata.type === 'pump') pumps++;
+                else if (objData.metadata.type === 'valve') valves++;
+            });
+            
+            document.getElementById('pumpCount').textContent = pumps;
+            document.getElementById('valveCount').textContent = valves;
+            document.getElementById('totalCount').textContent = sceneObjects.size;
+        }
+        
+        // ==========================================
+        // ANIMATION
+        // ==========================================
+        function animate() {
+            if (!renderer.xr.isPresenting) {
+                controls.update();
+            }
+            
+            // Make info panels face camera in VR
+            if (renderer.xr.isPresenting) {
+                sceneObjects.forEach((objData) => {
+                    if (objData.infoPanel) {
+                        objData.infoPanel.lookAt(camera.position);
+                    }
+                });
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
