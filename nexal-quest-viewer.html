@@ -773,16 +773,21 @@
                 const scaleFactor = realWorldHeight / size.y;
                 model.scale.multiplyScalar(scaleFactor);
                 
+                // Recalculate bounding box after scaling
+                const scaledBox = new THREE.Box3().setFromObject(model);
+                const scaledSize = scaledBox.getSize(new THREE.Vector3());
+                const yOffset = scaledSize.y / 2; // Half height to place bottom on ground
+                
                 // Position from node data or auto-position
                 if (node.position) {
-                    model.position.set(node.position.x, node.position.y || 0, node.position.z);
+                    model.position.set(node.position.x, node.position.y || yOffset, node.position.z);
                 } else {
                     // Auto-position in a grid
                     const index = sceneObjects.size;
                     const spacing = 3;
                     const xPos = (index % 5) * spacing - 6;
                     const zPos = Math.floor(index / 5) * spacing;
-                    model.position.set(xPos, 0, zPos);
+                    model.position.set(xPos, yOffset, zPos); // Use yOffset instead of 0
                 }
                 
                 // Enable shadows
