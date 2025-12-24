@@ -561,9 +561,45 @@
         
         function onSqueezeEnd() {
             if (grabbedObject && grabController) {
+                // Save world position before reparenting
+                const worldPosition = new THREE.Vector3();
+                grabbedObject.getWorldPosition(worldPosition);
+                
+                // Save world rotation
+                const worldQuaternion = new THREE.Quaternion();
+                grabbedObject.getWorldQuaternion(worldQuaternion);
+                
+                // Reparent from controller back to group
                 grabController.remove(grabbedObject);
                 group.add(grabbedObject);
                 
+                // Restore world position and rotation
+                grabbedObject.position.copy(worldPosition);
+                grabbedObject.quaternion.copy(worldQuaternion);
+                
+                // Constrain to ground level (keep Y position at correct height)
+                // Get the model height from sceneObjects
+                const objData = Array.from(sceneObjects.values()).find(data => data.model === grabbedObject);
+                if (objData) {
+                    const modelType = objData.metadata.type;
+                    let properHeight = 0;
+                    
+                    if (modelType === 'pump') {
+                        properHeight = REAL_WORLD_HEIGHTS.pump / 2; // Half height
+                    } else if (modelType === 'valve') {
+                        const valveType = objData.metadata.data?.valveType || 'Gate';
+                        if (valveType === 'Check' || valveType === 'NRV') {
+                            properHeight = REAL_WORLD_HEIGHTS.checkValve / 2;
+                        } else {
+                            properHeight = REAL_WORLD_HEIGHTS.gateValve / 2;
+                        }
+                    }
+                    
+                    // Set Y to proper height (sits on ground)
+                    grabbedObject.position.y = properHeight;
+                }
+                
+                // Remove visual feedback
                 grabbedObject.traverse((child) => {
                     if (child.isMesh && child.material && child.userData.originalEmissive !== undefined) {
                         if (child.material.emissive) {
@@ -571,6 +607,8 @@
                         }
                     }
                 });
+                
+                console.log('Object placed at:', grabbedObject.position);
                 
                 grabbedObject = null;
                 grabController = null;
