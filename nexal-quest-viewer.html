@@ -522,6 +522,79 @@
             const line2 = new THREE.Line(geometry, material);
             line2.scale.z = 5;
             controller2.add(line2);
+            
+            // Create floating info panel (hidden by default)
+            createFloatingInfoPanel();
+        }
+        
+        // Global floating info panel
+        let floatingInfoPanel = null;
+        
+        function createFloatingInfoPanel() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.MeshBasicMaterial({ 
+                map: texture,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            floatingInfoPanel = new THREE.Mesh(geometry, material);
+            
+            floatingInfoPanel.userData.canvas = canvas;
+            floatingInfoPanel.userData.context = canvas.getContext('2d');
+            floatingInfoPanel.visible = false;  // Hidden by default
+            
+            scene.add(floatingInfoPanel);
+        }
+        
+        function updateFloatingInfoPanel(node) {
+            if (!floatingInfoPanel) return;
+            
+            const canvas = floatingInfoPanel.userData.canvas;
+            const ctx = floatingInfoPanel.userData.context;
+            
+            // Clear and redraw
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+            
+            ctx.fillStyle = '#00d4ff';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText(node.tag, 40, 80);
+            
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = '32px Arial';
+            ctx.fillText(node.type.toUpperCase(), 40, 130);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '26px Arial';
+            let y = 200;
+            if (node.data) {
+                for (const [key, value] of Object.entries(node.data)) {
+                    if (value && value !== '—') {
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        ctx.fillText(`${label}: ${value}`, 40, y);
+                        y += 40;
+                    }
+                }
+            }
+            
+            floatingInfoPanel.material.map.needsUpdate = true;
+        }
+        
+        function hideFloatingInfoPanel() {
+            if (floatingInfoPanel) {
+                floatingInfoPanel.visible = false;
+            }
         }
         
         function onSqueezeStart(controller) {
@@ -845,23 +918,16 @@
                     }
                 });
                 
-                // Store metadata
+                // Store metadata on model for raycast detection
                 model.userData.nodeId = node.id;
                 model.userData.nodeType = node.type;
-                
-                // Create VR info panel
-                const infoPanel = createVRInfoPanel(node);
-                // Position info panel above equipment
-                const panelHeight = node.type === 'pump' ? 2.0 : 1.8;  // Above pump/valve
-                infoPanel.position.set(0, panelHeight, 0);
-                model.add(infoPanel);
+                model.userData.metadata = node;
                 
                 group.add(model);
                 
                 sceneObjects.set(node.id, {
                     model: model,
-                    metadata: node,
-                    infoPanel: infoPanel
+                    metadata: node
                 });
                 
             } catch (error) {
@@ -878,104 +944,13 @@
                 objData.model.position.set(node.position.x, node.position.y || 0, node.position.z);
             }
             
-            // Update metadata
+            // Update metadata on model and in sceneObjects
             objData.metadata = node;
+            objData.model.userData.metadata = node;
             
-            // Update info panel
-            updateVRInfoPanel(objData.infoPanel, node);
+            // Floating panel will update automatically when pointed at equipment
         }
         
-        function createVRInfoPanel(node) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            
-            // Draw panel background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Border
-            ctx.strokeStyle = '#00d4ff';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-            
-            // Title
-            ctx.fillStyle = '#00d4ff';
-            ctx.font = 'bold 40px Arial';
-            ctx.fillText(node.tag, 40, 80);
-            
-            // Type
-            ctx.fillStyle = '#4CAF50';
-            ctx.font = '32px Arial';
-            ctx.fillText(node.type.toUpperCase(), 40, 130);
-            
-            // Data
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '26px Arial';
-            let y = 200;
-            if (node.data) {
-                for (const [key, value] of Object.entries(node.data)) {
-                    if (value && value !== '—') {
-                        const label = key.charAt(0).toUpperCase() + key.slice(1);
-                        ctx.fillText(`${label}: ${value}`, 40, y);
-                        y += 40;
-                    }
-                }
-            }
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            const material = new THREE.MeshBasicMaterial({ 
-                map: texture,
-                transparent: true,
-                side: THREE.DoubleSide
-            });
-            const geometry = new THREE.PlaneGeometry(1, 1);
-            const panel = new THREE.Mesh(geometry, material);
-            
-            panel.userData.canvas = canvas;
-            panel.userData.context = ctx;
-            
-            return panel;
-        }
-        
-        function updateVRInfoPanel(panel, node) {
-            const canvas = panel.userData.canvas;
-            const ctx = panel.userData.context;
-            
-            // Clear and redraw
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.strokeStyle = '#00d4ff';
-            ctx.lineWidth = 4;
-            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-            
-            ctx.fillStyle = '#00d4ff';
-            ctx.font = 'bold 40px Arial';
-            ctx.fillText(node.tag, 40, 80);
-            
-            ctx.fillStyle = '#4CAF50';
-            ctx.font = '32px Arial';
-            ctx.fillText(node.type.toUpperCase(), 40, 130);
-            
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '26px Arial';
-            let y = 200;
-            if (node.data) {
-                for (const [key, value] of Object.entries(node.data)) {
-                    if (value && value !== '—') {
-                        const label = key.charAt(0).toUpperCase() + key.slice(1);
-                        ctx.fillText(`${label}: ${value}`, 40, y);
-                        y += 40;
-                    }
-                }
-            }
-            
-            panel.material.map.needsUpdate = true;
-        }
         
         // ==========================================
         // UI UPDATES
@@ -1013,15 +988,61 @@
         function animate() {
             if (!renderer.xr.isPresenting) {
                 controls.update();
-            }
-            
-            // Make info panels face camera in VR
-            if (renderer.xr.isPresenting) {
-                sceneObjects.forEach((objData) => {
-                    if (objData.infoPanel) {
-                        objData.infoPanel.lookAt(camera.position);
+            } else {
+                // VR Mode: Check if controllers are pointing at equipment
+                let hitObject = null;
+                
+                // Check controller 1
+                if (controller1) {
+                    tempMatrix.identity().extractRotation(controller1.matrixWorld);
+                    raycaster.ray.origin.setFromMatrixPosition(controller1.matrixWorld);
+                    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+                    
+                    const intersects = raycaster.intersectObjects(group.children, true);
+                    if (intersects.length > 0) {
+                        let intersectedObj = intersects[0].object;
+                        while (intersectedObj.parent !== group && intersectedObj.parent !== scene) {
+                            intersectedObj = intersectedObj.parent;
+                        }
+                        if (intersectedObj.parent === group && intersectedObj.userData.metadata) {
+                            hitObject = intersectedObj;
+                        }
                     }
-                });
+                }
+                
+                // Check controller 2 if controller 1 didn't hit anything
+                if (!hitObject && controller2) {
+                    tempMatrix.identity().extractRotation(controller2.matrixWorld);
+                    raycaster.ray.origin.setFromMatrixPosition(controller2.matrixWorld);
+                    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+                    
+                    const intersects = raycaster.intersectObjects(group.children, true);
+                    if (intersects.length > 0) {
+                        let intersectedObj = intersects[0].object;
+                        while (intersectedObj.parent !== group && intersectedObj.parent !== scene) {
+                            intersectedObj = intersectedObj.parent;
+                        }
+                        if (intersectedObj.parent === group && intersectedObj.userData.metadata) {
+                            hitObject = intersectedObj;
+                        }
+                    }
+                }
+                
+                // Update floating info panel based on hit
+                if (hitObject && floatingInfoPanel) {
+                    floatingInfoPanel.visible = true;
+                    updateFloatingInfoPanel(hitObject.userData.metadata);
+                    
+                    // Position panel near the equipment (slightly above)
+                    const targetPos = hitObject.position.clone();
+                    targetPos.y += 1.5;  // Above equipment
+                    floatingInfoPanel.position.copy(targetPos);
+                    
+                    // Make panel face camera
+                    floatingInfoPanel.lookAt(camera.position);
+                } else {
+                    hideFloatingInfoPanel();
+                }
             }
             
             renderer.render(scene, camera);
