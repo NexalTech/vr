@@ -577,25 +577,22 @@
                 grabbedObject.position.copy(worldPosition);
                 grabbedObject.quaternion.copy(worldQuaternion);
                 
-                // Constrain to ground level (keep Y position at correct height)
-                // Get the model height from sceneObjects
+                // Constrain Y position to proper floating height
+                // Get the model type from sceneObjects
                 const objData = Array.from(sceneObjects.values()).find(data => data.model === grabbedObject);
                 if (objData) {
                     const modelType = objData.metadata.type;
-                    let properHeight = 0;
+                    let properHeight;
                     
                     if (modelType === 'pump') {
-                        properHeight = REAL_WORLD_HEIGHTS.pump / 2; // Half height
+                        properHeight = 1.5;  // Pumps at chest height
                     } else if (modelType === 'valve') {
-                        const valveType = objData.metadata.data?.valveType || 'Gate';
-                        if (valveType === 'Check' || valveType === 'NRV') {
-                            properHeight = REAL_WORLD_HEIGHTS.checkValve / 2;
-                        } else {
-                            properHeight = REAL_WORLD_HEIGHTS.gateValve / 2;
-                        }
+                        properHeight = 1.2;  // Valves at waist height
+                    } else {
+                        properHeight = 0.5;  // Default
                     }
                     
-                    // Set Y to proper height (sits on ground)
+                    // Set Y to proper floating height
                     grabbedObject.position.y = properHeight;
                 }
                 
@@ -814,18 +811,30 @@
                 // Recalculate bounding box after scaling
                 const scaledBox = new THREE.Box3().setFromObject(model);
                 const scaledSize = scaledBox.getSize(new THREE.Vector3());
-                const yOffset = scaledSize.y / 2; // Half height to place bottom on ground
+                
+                // Lift equipment above ground for better visibility in VR
+                let yPosition;
+                if (node.type === 'pump') {
+                    // Pumps at 1.5m (visible at chest height)
+                    yPosition = 1.5;
+                } else if (node.type === 'valve') {
+                    // Valves at 1.2m (visible at waist height)
+                    yPosition = 1.2;
+                } else {
+                    // Default: half height above ground
+                    yPosition = scaledSize.y / 2;
+                }
                 
                 // Position from node data or auto-position
                 if (node.position) {
-                    model.position.set(node.position.x, node.position.y || yOffset, node.position.z);
+                    model.position.set(node.position.x, yPosition, node.position.z);
                 } else {
                     // Auto-position in a grid
                     const index = sceneObjects.size;
                     const spacing = 3;
                     const xPos = (index % 5) * spacing - 6;
                     const zPos = Math.floor(index / 5) * spacing;
-                    model.position.set(xPos, yOffset, zPos); // Use yOffset instead of 0
+                    model.position.set(xPos, yPosition, zPos);
                 }
                 
                 // Enable shadows
@@ -842,7 +851,9 @@
                 
                 // Create VR info panel
                 const infoPanel = createVRInfoPanel(node);
-                infoPanel.position.set(0, realWorldHeight + 0.5, 0);
+                // Position info panel above equipment
+                const panelHeight = node.type === 'pump' ? 2.0 : 1.8;  // Above pump/valve
+                infoPanel.position.set(0, panelHeight, 0);
                 model.add(infoPanel);
                 
                 group.add(model);
